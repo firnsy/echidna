@@ -241,7 +241,7 @@ sub ping {
 
     $heap->{ping_recv} = $ping_time if $ping_time;
 
-    if ( $heap->{status} ne 'EST' || ! $heap->{session_key}) {
+    if ( ! _is_authenticated() ) {
         $heap->{client}->put(json_error_create($json, JSONRPC_NSMF_UNAUTHORIZED));
         return;
     }
@@ -255,43 +255,11 @@ sub ping {
     $heap->{client}->put($response);
 }
 
-#sub child_output {
-#    my ($kernel, $heap, $output) = @_[KERNEL, HEAP, ARG0];
-#    $logger->debug(Dumper($output));
-#}
-
-#sub child_error {
-#    $logger->error("Child Error: $_[ARG0]");
-#}
-
-#sub child_signal {
-#    my $heap = $_[HEAP];
-#    #$logger->debug("   * PID: $_[ARG1] exited with status $_[ARG2]");
-#    my $child = delete $heap->{children_by_pid}{$_[ARG1]};
-
-#    return if ( ! defined($child) );
-
-#    delete $heap->{children_by_wid}{$child->ID};
-#}
-
-#sub child_close {
-#    my ($heap, $wid) = @_[HEAP, ARG0];
-#    my $child = delete $heap->{children_by_wid}{$wid};
-
-#    if ( ! defined($child) ) {
-#    #    $logger->debug("Wheel Id: $wid closed");
-#        return;
-#    }
-
-#    #$logger->debug("   * PID: " .$child->PID. " closed");
-#    delete $heap->{children_by_pid}{$child->PID};
-#}
-
 sub post {
     my ($kernel, $heap, $json) = @_[KERNEL, HEAP, ARG0];
     my $self = shift;
 
-    if ( $heap->{status} ne 'EST' || ! $heap->{session_key}) {
+    if ( ! _is_authenticated($heap) ) {
         $heap->{client}->put(json_result_create($json, 'Bad request'));
         return;
     }
@@ -339,7 +307,7 @@ sub get {
     my ($kernel, $heap, $json) = @_[KERNEL, HEAP, ARG0];
     my $self = shift;
 
-    if ( $heap->{status} ne 'EST' || ! $heap->{session_key}) {
+    if ( ! _is_authenticated($heap) ) {
         $heap->{client}->put(json_result_create($json, 'Bad request'));
         return;
     }
@@ -383,15 +351,21 @@ sub get {
             my $ret = undef;
 
             eval {
-                $ret = $heap->{module}{$module_type}->get( $json->{params}{data}, sub { 
-                    my $ret = shift;
-                    my $response = json_result_create($json, $ret);
+                $ret = $heap->{module}{$module_type}->get(
+#                    {
+                       $json->{params}{data},
+#                      %{ $json->{params}{data} },
+#                      _client_id => $heap->{details}{id},
+#                    },
+                    sub {
+                        my $ret = shift;
+                        my $response = json_result_create($json, $ret);
 
-                    # don't reply with empty strings
-                    if ( $response ne '' ) {
-                        $heap->{client}->put($response);
-                    }
-                });
+                        # don't reply with empty strings
+                        if ( $response ne '' ) {
+                            $heap->{client}->put($response);
+                        }
+                    });
             };
 
             if ( $@ ) {
@@ -412,6 +386,22 @@ sub get {
     else {
         $heap->{client}->put(json_error_create($json, JSONRPC_NSMF_GET_UNSUPPORTED));
     }
+}
+
+#                                                                                        # send POST message from the client to the server
+#
+sub send_post {
+  my ($kernel, $heap, $data, $callback) = @_[KERNEL, HEAP, ARG0, ARG1];
+  my $self = shift;
+
+  return if $heap->{shutdown};
+
+  # verify established connection
+
+  return if ( ! _is_authenticated($heap) );
+  my $payload = json_encode(json_message_create('post', $data, $callback));
+
+  $heap->{client}->put($payload);
 }
 
 sub _is_authenticated {

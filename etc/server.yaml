@@ -25,7 +25,8 @@ log:
     debug:
         level: debug
         timestamp: 1
-        logfile: 'server-debug.log'
+#        logfile: 'server-debug.log'
+        logfile: stdout
 
 #
 # PROTOCOL

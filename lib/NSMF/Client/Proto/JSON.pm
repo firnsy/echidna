@@ -86,6 +86,8 @@ sub dispatcher {
     my $json = {};
     my $action = undef;
 
+    $heap->{stage} //= 'REQ';
+
     eval {
         $json = json_decode($request);
         $action = json_action_get($json);
@@ -245,6 +247,9 @@ sub got_pong {
 
 ################ END KEEP ALIVE ###################
 
+#
+# send POST message from the client to the server
+#
 sub post {
     my ($kernel, $heap, $data, $callback) = @_[KERNEL, HEAP, ARG0, ARG1];
     my $self = shift;
@@ -254,22 +259,15 @@ sub post {
     # verify established connection
     return if ( $heap->{stage} ne 'EST' );
 
-#    $logger->debug('-> Sending POST...');
-
-    # TODO: validate type croak on fail
-    #if ( ref($type) ) {
-    #   my %hash = %$data;
-    #   $type = keys %hash;
-    #   $data = $hash{$type};
-    #}
-
     my $payload = json_encode(json_message_create('post', $data, $callback));
 
     $heap->{server}->put($payload);
 
-#    $logger->debug('Data Size: ' . length($payload));
 }
 
+#
+# send GET message from the client to the server
+#
 sub get {
     my ($kernel, $heap, $data, $callback) = @_[KERNEL, HEAP, ARG0, ARG1];
     my $self = shift;
@@ -279,20 +277,9 @@ sub get {
     # verify established connection
     return if ( $heap->{stage} ne 'EST' );
 
-#    $logger->debug('-> Sending GET...');
-
-    # TODO: validate type croak on fail
-    #if ( ref($type) ) {
-    #   my %hash = %$data;
-    #   $type = keys %hash;
-    #   $data = $hash{$type};
-    #}
-
     my $payload = json_encode(json_message_create('get', $data, $callback));
 
     $heap->{server}->put($payload);
-
-#    $logger->debug('Data Size: ' . length($payload));
 }
 
 1;

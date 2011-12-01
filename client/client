@@ -241,7 +241,7 @@ my $commands_all = [
     },
     {
         command => "node version",
-        help => "Show the version and build information for the specified Echidna node.",
+        help => "Show the version and build information for the specified Echidna node.\n",
         function => "show_node_version",
         api => { core => [ "node_version" ] }
     },
@@ -253,9 +253,15 @@ my $commands_all = [
     },
     {
         command => "server version",
-        help => "Show the version and build information for the Echidna server.",
+        help => "Show the version and build information for the Echidna server.\n",
         function => "show_server_version",
         api => { core => [ "server_version" ] }
+    },
+    {
+        command => "node subscribe",
+        help => "Subscribe to the specified nodes events.\n",
+        function => "subscribe_node",
+        api => { core => [ "subscribe_node" ] }
     }
 ];
 
@@ -351,6 +357,8 @@ POE::Session->create(
         register_node => \&register_node,
         unregister_node => \&unregister_node,
         update_node => \&update_node,
+
+        subscribe_node => \&subscribe_node,
 
         register_agent => \&register_agent,
         unregister_agent => \&unregister_agent,
@@ -609,7 +617,7 @@ sub server_connect {
         $connecting = 1;
 
         $kernel->call('console', 'put_output', 'Connecting to ' . $user . '@' . $host . ':' . $port . '...');
-        print('Password:');
+        print('Password: ');
         ReadMode "noecho";
         $pass = <STDIN>;
         chomp($pass);
@@ -1144,6 +1152,54 @@ sub unregister_node {
 
     return 0;
 }
+
+sub subscribe_node {
+    my ($kernel, $heap, $data) = @_[KERNEL, HEAP, ARG0];
+
+    if( $data =~ /^subscribe\snode\s?(.*)/) {
+        my $sql = {};
+
+        my @search_args = split(/[ ]/, $1);
+
+        foreach my $k ( @search_args ) {
+            given( $k ) {
+                when(/^--id=([^ ]*)/) {
+                    $sql->{id} = $1;
+                }
+                default {
+                    $kernel->call('console', 'put_output', 'Unsupported parameter: ' . $k);
+                    return 1;
+                }
+            }
+        }
+
+        if( ! defined_args( $sql->{id} )  ){
+            $kernel->call('console', 'put_output', "Mandatory arguments are missing.");
+            return 1;
+        }
+
+        $kernel->post('client', 'get', {
+            type => "core",
+            data => {
+              "subscribe_node" => $sql
+            },
+        }, sub {
+            my ($s, $k, $h, $json) = @_;
+
+            my $result = $json->{result} // [];
+
+            # TODO post process result with client aware components
+
+            $kernel->call('console', 'put_output', Dumper($result));
+        });
+
+        return 1;
+    }
+
+    return 0;
+}
+
+
 
 sub show_clients {
     my ($kernel, $heap, $data) = @_[KERNEL, HEAP, ARG0];

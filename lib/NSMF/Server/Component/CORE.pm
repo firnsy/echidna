@@ -126,12 +126,12 @@ sub init {
         },
         "subscribe_node" => {
           # subscribe to a node's broadcasts
-          "exec" => sub{ },
+          "exec" => \&node_subscribe,
           "acl" => 127,
         },
         "unsubscribe_node" => {
           # Unsubscribe from a node's broadcasts
-          "exec" => sub{ },
+          "exec" => \&node_unsubscribe,
           "acl" => 127,
         },
 
@@ -415,11 +415,63 @@ sub agent_unsubscribe {
 sub node_subscribe {
     my ($self, $params, $callback) = @_;
 
+    my $nodes = NSMF::Server->instance()->nodes();
+
+    # assume success
+    my $ret = 0;
+
+    # ensure we have an id defined
+    if ( defined($params->{id}) ) {
+
+        # check if the node is actually registered
+        if ( grep { $_ eq $params->{id} } keys( %{ $nodes } ) )
+        {
+            $logger->debug("SUBSCRIPTIONS", %{ $nodes->{ $params->{id} }{subscriptions} });
+
+            if ( ! grep { $_ eq $params->{_client_id} } keys( %{ $nodes->{ $params->{id} }{subscriptions} } ) )
+            {
+                $nodes->{ $params->{id} }{subscriptions}{ $params->{_client_id} } = 1;
+            }
+        }
+        else {
+            $ret = 1;
+        }
+    }
+    else {
+        $ret = 1;
+    }
+
+
+    $callback->($ret);
 }
 
 sub node_unsubscribe {
     my ($self, $params, $callback) = @_;
 
+    my $nodes = NSMF::Server->instance()->nodes();
+
+    # assume success
+    my $ret = 0;
+
+    # ensure we have an id defined
+    if ( defined($params->{id}) ) {
+
+        # ensure the requesting client (ID) is actually subscribed
+        if ( grep { $_ eq $params->{_client_id} } keys( %{ $nodes->{ $params->{id} }{subscriptions} } ) )
+        {
+            delete $nodes->{ $params->{id} }{subscriptions}{ $params->{_client_id} };
+        }
+        # otherwise we were not subscribed
+        else {
+            $ret = 1;
+        }
+    }
+    # otherwise no node (ID) was specified
+    else {
+        $ret = 1;
+    }
+
+    $callback->($ret);
 }
 
 
@@ -552,7 +604,6 @@ sub get_nodes_connected {
 
     my $db = NSMF::Server->database();
 
-    # TODO: validate params
     my $nodes = [];
 
     my $ret = $db->search({

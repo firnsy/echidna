@@ -25,11 +25,13 @@ package NSMF::Server::WebSocket;
 use warnings;
 use strict;
 
+use v5.10;
 #
 # PERL INCLUDES
 #
 use Carp;
 use Digest::MD5 qw(md5);
+use Digest::SHA qw(sha1_base64);
 use POE::Filter::Line;
 
 #
@@ -47,21 +49,49 @@ our @EXPORT = qw(websocket_handshake);
 #
 # GLOBAL VARIABLES
 #
-my $logger = NSMF::Common::Registry->get('log') 
-    // carp 'Got an empty config object from Registry';
+my $logger;
 
 #
 # WEBSOCKET ROUTINES
 #
 
-#
-#
 sub websocket_handshake
+{
+    my ($wheel, $data) = @_;
+
+    $logger = NSMF::Common::Registry->get('log') // carp 'Got an empty config object from Registry';
+    $logger->debug("WebSocket upgrade request: \n" . $data);
+
+    # check for a version 8
+
+    if ( $data =~ /Sec-WebSocket-Version:\s(\d+)/ ) {
+        given( $1 ) {
+            when("8") {
+                $logger->debug("VERSION 8");
+                websocket_handshake_version_8($wheel, $data);
+                return 1;
+            }
+            default {
+                return 0;
+            }
+        }
+    }
+    elsif ( $data =~ /Sec-WebSocket-Key\d/ ) {
+        $logger->debug("VERSION 7");
+        websocket_handshake_version_7($wheel, $data);
+        return 1;
+    }
+
+    return 0;
+}
+
+#
+#
+sub websocket_handshake_version_7
 {
     my ($wheel, $data) = @_;
     my ($resource, $host, $origin, $key1, $key2) = ("", "", "", "", "");
 
-    $logger->debug("WebSocket upgrade request: \n" . $data);
 
     $resource = $1 if ($data =~ /GET (.*) HTTP/);
     $host = $1 if ($data =~ /Host: (.*)\r\n/);
@@ -108,6 +138,30 @@ sub websocket_handshake
     websocket_upgrade_connection($wheel, $response);
 }
 
+sub websocket_handshake_version_8 {
+    my ($wheel, $data) = @_;
+    my ($resource, $host, $origin, $key) = ("", "", "", "");
+
+    $resource = $1 if ($data =~ /GET (.*) HTTP/);
+    $host = $1 if ($data =~ /Host: (.*)\r\n/);
+    $origin = $1 if ($data =~ /Origin: (.*)\r\n/);
+    $key = $1 if ($data =~ /Sec-WebSocket-Key: ([A-Za-z0-9+\/=]+)/);
+
+
+    my $challenge = sha1_base64($key . "258EAFA5-E914-47DA-95CA-C5AB0DC85B11") . '=';
+
+    # prepare the server response
+    my $response = "HTTP/1.1 101 Switching Protocols\r\n" .
+                   "Upgrade: websocket\r\n" .
+                   "Connection: Upgrade\r\n" .
+                   "Sec-WebSocket-Accept: " . $challenge . "\r\n" .
+                   "Sec-WebSocket-Protocol: echidna\r\n" .
+                   "\r\n";
+
+    websocket_upgrade_connection($wheel, $response);
+}
+
+
 #
 #
 sub websocket_upgrade_connection
@@ -125,7 +179,7 @@ sub websocket_upgrade_connection
         $wheel->set_filter( POE::Filter::Line->new( Literal => chr(0xff) ) );
 
         # XXX: for some reason we need to send dummy data once connection is opened
-        $wheel->put(chr(0x00) . "nullage");
+        $wheel->put(chr(0x00) . "nullage" . chr(0xff));
     }
 }
 

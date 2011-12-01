@@ -103,7 +103,10 @@ sub node_registered {
 
         # add session->ID() to node ID map
         my $nodes = NSMF::Server->instance()->nodes();
-        $nodes->{ $heap->{module_details}{id} } = $session->ID();
+        $nodes->{ $heap->{module_details}{id} } = {
+          session => $session->ID(),
+          subscriptions => {},
+        };
     }
 }
 
@@ -116,11 +119,9 @@ sub node_unregistered {
 
         # remove session->ID() to node ID map
         my $nodes = NSMF::Server->instance()->nodes();
-        $nodes->{ $heap->{module_details}{id} } = $session->ID();
+        delete $nodes->{ $heap->{module_details}{id} };
     }
 }
-
-
 
 sub dispatcher {
     my ($kernel, $heap, $request) = @_[KERNEL, HEAP, ARG0];

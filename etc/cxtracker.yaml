@@ -10,7 +10,7 @@ server:
     port: 10101
 
 settings:
-    cxtdir: '/var/lib/cxtracker/'
+    cxtdir: '/var/log/cxtracker/'
 
 #
 # LOG
